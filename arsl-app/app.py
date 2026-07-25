@@ -177,7 +177,7 @@ st.write("")
 
 
 # ============================ Sentence panel =========================
-def sentence_panel() -> None:
+def sentence_panel(key_prefix: str) -> None:
     st.markdown("#### ✍️ الجملة المُكوَّنة")
     st.markdown(
         f"<div class='sentence-box'>{builder.text or '<span style=\"opacity:.4\">ابدأ بالإشارة…</span>'}</div>",
@@ -185,18 +185,18 @@ def sentence_panel() -> None:
     )
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    if c1.button("␣ مسافة", use_container_width=True):
+    if c1.button("␣ مسافة", use_container_width=True, key=f"{key_prefix}_space"):
         builder.add_space(); st.rerun()
-    if c2.button("⌫ حذف", use_container_width=True):
+    if c2.button("⌫ حذف", use_container_width=True, key=f"{key_prefix}_del"):
         builder.backspace(); st.rerun()
-    if c3.button("🗑️ مسح الكل", use_container_width=True):
+    if c3.button("🗑️ مسح الكل", use_container_width=True, key=f"{key_prefix}_clear"):
         builder.clear(); st.rerun()
-    if c4.button("🔊 نطق عربي", use_container_width=True) and builder.text.strip():
+    if c4.button("🔊 نطق عربي", use_container_width=True, key=f"{key_prefix}_audio") and builder.text.strip():
         try:
             st.audio(tts_bytes(builder.text, "ar"), format="audio/mp3")
         except Exception as e:  # noqa: BLE001
             st.error(f"خطأ في النطق: {e}")
-    if c5.button("🌐 ترجم", use_container_width=True) and builder.text.strip():
+    if c5.button("🌐 ترجم", use_container_width=True, key=f"{key_prefix}_trans") and builder.text.strip():
         st.session_state._translation = translate(builder.text, target=target_lang, source="ar")
 
     if builder.words:
@@ -219,6 +219,7 @@ def sentence_panel() -> None:
             data=builder.text.encode("utf-8"),
             file_name="sentence.txt",
             mime="text/plain",
+            key=f"{key_prefix}_download"
         )
 
 
@@ -260,7 +261,7 @@ with tab_cam:
             else:
                 st.warning("لم يتم اكتشاف إشارة.")
     with col2:
-        sentence_panel()
+        sentence_panel("cam")
 
     st.info("💡 للأداء الحقيقي real-time (30+ FPS) شغّل: `python -m src.cli webcam`")
 
@@ -293,7 +294,7 @@ with tab_img:
             else:
                 st.info("لم يتم اكتشاف أي إشارة.")
     with col2:
-        sentence_panel()
+        sentence_panel("img")
 
 # ---------------- Video ----------------
 with tab_vid:
@@ -322,7 +323,7 @@ with tab_vid:
             cap.release()
             st.success(f"✅ تم معالجة {n} فريم")
     with col2:
-        sentence_panel()
+        sentence_panel("vid")
 
 # ---------------- About ----------------
 with tab_about:
