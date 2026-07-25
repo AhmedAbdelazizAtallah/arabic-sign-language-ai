@@ -328,13 +328,17 @@ with tab_img:
                     })
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
+                # الإضافة التلقائية فور الكشف بدون زر
                 label, cf = _top_detection(res)
-                if st.button("➕ أضف للجملة", type="primary"):
+                if label:
                     for _ in range(builder.stability_frames):
-                        builder.observe(label, cf)
-                    st.rerun()
+                        added = builder.observe(label, cf)
+                    if added:
+                        st.success(f"✅ أضيف تلقائياً: **{added}** ({cf:.2f})")
+                    else:
+                        st.info(f"🔍 مكتشف: **{label}** ({cf:.2f})")
             else:
-                st.info("لم يتم اكتشاف أي إشارة.")
+                st.warning("لم يتم اكتشاف أي إشارة.")
     with col2:
         sentence_panel("img")
 
