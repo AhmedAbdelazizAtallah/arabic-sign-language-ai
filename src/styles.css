@@ -1,22 +1,10 @@
-@import "tailwindcss" source(none);
+@import "tailwindcss";
 @source "../src";
-@import "tw-animate-css";
+/* يفضل استخدام @plugin بدلاً من @import لمكتبة الأنيميشن في الإصدار الرابع */
+@plugin "tailwindcss-animate"; 
 
-@custom-variant dark (&:is(.dark *));
-
-/*
- * Design system definition.
- *
- * The @theme inline block maps CSS custom properties to Tailwind utility
- * classes (e.g. --color-primary -> bg-primary, text-primary).
- *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
- *
- * To add a new semantic color:
- * 1. Add the variable to :root (light value) and .dark (dark value)
- * 2. Register it in @theme inline as --color-<name>: var(--<name>)
- */
+/* التعديل الأول: جعل الوضع الليلي يعمل على العنصر نفسه وأبنائه */
+@custom-variant dark (&:is(.dark, .dark *));
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
@@ -98,6 +86,8 @@
 }
 
 .dark {
+  /* التعديل الثاني: إضافة color-scheme لتحسين ألوان المتصفح الافتراضية (مثل الـ Scrollbar) */
+  color-scheme: dark;
   --background: oklch(0.129 0.042 264.695);
   --foreground: oklch(0.984 0.003 247.858);
   --card: oklch(0.208 0.042 265.755);
@@ -134,11 +124,13 @@
 
 @layer base {
   * {
-    border-color: var(--color-border);
+    /* التعديل الثالث: استخدام اسم المتغير الأصلي مباشرة */
+    border-color: var(--border);
   }
 
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
+    /* التعديل الرابع: إزالة كلمة color- من المتغيرات لاستدعاء اللون الصحيح */
+    background-color: var(--background);
+    color: var(--foreground);
   }
 }
