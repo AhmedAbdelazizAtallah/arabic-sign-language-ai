@@ -38,13 +38,17 @@ def inject_css(dark: bool) -> None:
     st.markdown(
         f"""
         <style>
-        /* إجبار الخلفية الأساسية */
-        html, body, [class*="stApp"], .stApp [data-testid="stAppViewContainer"] {{
+        /* إجبار الخلفية الأساسية والشريط العلوي */
+        html, body, [class*="stApp"], .stApp [data-testid="stAppViewContainer"], header[data-testid="stHeader"] {{
             background: {bg} !important;
-            color: {text} !important;
-            font-family: 'Cairo','Segoe UI',sans-serif;
         }}
         
+        /* إجبار خلفية الشريط الجانبي (Sidebar) */
+        section[data-testid="stSidebar"] {{
+            background: {surface} !important;
+            border-left: 1px solid {border} !important;
+        }}
+
         /* إجبار لون النص على كل العناصر لتخطي ألوان Streamlit الافتراضية */
         p, h1, h2, h3, h4, h5, h6, span, label, li {{
             color: {text} !important;
@@ -53,6 +57,15 @@ def inject_css(dark: bool) -> None:
         /* استثناء منطقة الـ Hero للحفاظ على نصوصها بيضاء دائماً */
         .hero p, .hero h1, .hero span {{
             color: white !important;
+        }}
+
+        /* تحسين شكل القائمة المنسدلة للغات (Selectbox) */
+        div[data-baseweb="select"] > div {{
+            background-color: {surface} !important;
+            border-color: {border} !important;
+        }}
+        div[data-baseweb="popover"] > div {{
+            background-color: {surface} !important;
         }}
 
         .block-container {{ padding-top: 1.2rem; padding-bottom: 3rem; max-width: 1300px; }}
@@ -92,7 +105,7 @@ def inject_css(dark: bool) -> None:
             font-size: .85rem; border:1px solid {accent}44;
         }}
         
-        /* تعديل التبويبات (Tabs) المخفية */
+        /* تعديل التبويبات (Tabs) */
         .stTabs [data-baseweb="tab-list"] {{ gap: 6px; }}
         .stTabs [data-baseweb="tab"] {{
             background: {surface} !important; border-radius: 12px; padding: 10px 18px;
