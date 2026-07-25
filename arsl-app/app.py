@@ -38,11 +38,23 @@ def inject_css(dark: bool) -> None:
     st.markdown(
         f"""
         <style>
-        html, body, [class*="stApp"] {{
+        /* إجبار الخلفية الأساسية */
+        html, body, [class*="stApp"], .stApp [data-testid="stAppViewContainer"] {{
             background: {bg} !important;
             color: {text} !important;
             font-family: 'Cairo','Segoe UI',sans-serif;
         }}
+        
+        /* إجبار لون النص على كل العناصر لتخطي ألوان Streamlit الافتراضية */
+        p, h1, h2, h3, h4, h5, h6, span, label, li {{
+            color: {text} !important;
+        }}
+
+        /* استثناء منطقة الـ Hero للحفاظ على نصوصها بيضاء دائماً */
+        .hero p, .hero h1, .hero span {{
+            color: white !important;
+        }}
+
         .block-container {{ padding-top: 1.2rem; padding-bottom: 3rem; max-width: 1300px; }}
         .hero {{
             background: linear-gradient(135deg, {accent} 0%, #22d3ee 100%);
@@ -57,46 +69,63 @@ def inject_css(dark: bool) -> None:
             border-radius: 999px; font-size:.8rem; backdrop-filter: blur(6px);
         }}
         .card {{
-            background: {surface}; border: 1px solid {border};
+            background: {surface} !important; border: 1px solid {border} !important;
             border-radius: 18px; padding: 18px; margin-bottom: 14px;
             box-shadow: 0 4px 20px -12px rgba(0,0,0,.15);
         }}
         .sentence-box {{
-            background: {surface}; border: 2px dashed {accent}55;
+            background: {surface} !important; border: 2px dashed {accent}55 !important;
             border-radius: 18px; padding: 24px; min-height: 90px;
-            font-size: 2rem; font-weight: 700; color: {text};
+            font-size: 2rem; font-weight: 700; 
             direction: rtl; text-align: right; line-height: 1.6;
             word-wrap: break-word;
         }}
         .translation-box {{
             background: linear-gradient(135deg,{accent}15,transparent);
-            border-radius: 14px; padding: 16px; color:{text};
+            border-radius: 14px; padding: 16px; 
             font-size: 1.15rem; direction: ltr; text-align: left;
-            border: 1px solid {border};
+            border: 1px solid {border} !important;
         }}
         .chip {{
             display:inline-block; padding: 6px 12px; margin: 3px;
-            background:{accent}22; color:{text}; border-radius: 999px;
+            background:{accent}22; border-radius: 999px;
             font-size: .85rem; border:1px solid {accent}44;
         }}
-        .metric-mini {{ color:{muted}; font-size:.85rem; }}
+        
+        /* تعديل التبويبات (Tabs) المخفية */
         .stTabs [data-baseweb="tab-list"] {{ gap: 6px; }}
         .stTabs [data-baseweb="tab"] {{
-            background: {surface}; border-radius: 12px; padding: 10px 18px;
-            border:1px solid {border};
+            background: {surface} !important; border-radius: 12px; padding: 10px 18px;
+            border:1px solid {border} !important;
+        }}
+        .stTabs [data-baseweb="tab"] p {{
+            color: {text} !important;
         }}
         .stTabs [aria-selected="true"] {{
-            background: {accent} !important; color: white !important; border-color: {accent} !important;
+            background: {accent} !important; border-color: {accent} !important;
         }}
+        .stTabs [aria-selected="true"] p {{
+            color: white !important;
+        }}
+
+        /* تعديل الأزرار (Buttons) */
         .stButton > button {{
-            border-radius: 12px; border: 1px solid {border}; background: {surface}; color: {text};
+            border-radius: 12px; border: 1px solid {border} !important; 
+            background: {surface} !important; 
             transition: all .15s ease;
         }}
-        .stButton > button:hover {{
-            border-color: {accent}; color: {accent}; transform: translateY(-1px);
+        .stButton > button p {{
+            color: {text} !important;
         }}
+        .stButton > button:hover {{
+            border-color: {accent} !important; transform: translateY(-1px);
+        }}
+        .stButton > button:hover p {{
+            color: {accent} !important;
+        }}
+
         div[data-testid="stFileUploader"] section {{
-            background: {surface}; border: 2px dashed {border}; border-radius: 14px;
+            background: {surface} !important; border: 2px dashed {border} !important; border-radius: 14px;
         }}
         .stAlert {{ border-radius: 12px; }}
         </style>
