@@ -252,7 +252,6 @@ st.write("")
 def sentence_panel(key_prefix: str) -> None:
     st.markdown("#### ✍️ الجملة المُكوَّنة")
     
-    # فصل النص الافتراضي في متغير لتفادي خطأ Backslash inside f-string
     placeholder = '<span style="opacity:.4">ابدأ بالإشارة…</span>'
     display_text = builder.text or placeholder
     
@@ -324,7 +323,15 @@ with tab_cam:
             key="arsl-webrtc-stream",
             video_processor_factory=SignLanguageProcessor,
             rtc_configuration=RTCConfiguration(
-                {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+                {
+                    "iceServers": [
+                        {"urls": ["stun:stun.l.google.com:19302"]},
+                        {"urls": ["stun:stun1.l.google.com:19302"]},
+                        {"urls": ["stun:stun2.l.google.com:19302"]},
+                        {"urls": ["stun:stun3.l.google.com:19302"]},
+                        {"urls": ["stun:stun4.l.google.com:19302"]},
+                    ]
+                }
             ),
             media_stream_constraints={"video": True, "audio": False},
             async_processing=True,
