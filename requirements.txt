@@ -1,0 +1,10 @@
+streamlit
+streamlit-webrtc
+av
+ultralytics
+opencv-python-headless
+numpy
+pandas
+pillow
+gTTS
+deep-translator
