@@ -251,8 +251,13 @@ st.write("")
 # ============================ Sentence panel =========================
 def sentence_panel(key_prefix: str) -> None:
     st.markdown("#### ✍️ الجملة المُكوَّنة")
+    
+    # فصل النص الافتراضي في متغير لتفادي خطأ Backslash inside f-string
+    placeholder = '<span style="opacity:.4">ابدأ بالإشارة…</span>'
+    display_text = builder.text or placeholder
+    
     st.markdown(
-        f"<div class='sentence-box'>{builder.text or '<span style=\"opacity:.4\">ابدأ بالإشارة…</span>'}</div>",
+        f"<div class='sentence-box'>{display_text}</div>",
         unsafe_allow_html=True,
     )
 
