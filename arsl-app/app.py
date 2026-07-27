@@ -1,16 +1,14 @@
-"""واجهة Streamlit عصرية: كاميرا مباشر (WebRTC) / صور / فيديو + بناء جمل + ترجمة + نطق."""
+"""واجهة Streamlit عصرية: كاميرا مباشر مدمجة / صور / فيديو + بناء جمل + ترجمة + نطق."""
 from __future__ import annotations
 
 import tempfile
 from pathlib import Path
 
-import av
 import cv2
 import numpy as np
 import pandas as pd
 import streamlit as st
 from PIL import Image
-from streamlit_webrtc import RTCConfiguration, VideoProcessorBase, webrtc_streamer
 
 from src.config import DEFAULT_CONF, DEFAULT_IMGSZ, DEFAULT_IOU
 from src.detector import class_names, load_model, predict
@@ -40,28 +38,23 @@ def inject_css(dark: bool) -> None:
     st.markdown(
         f"""
         <style>
-        /* إجبار الخلفية الأساسية والشريط العلوي */
         html, body, [class*="stApp"], .stApp [data-testid="stAppViewContainer"], header[data-testid="stHeader"] {{
             background: {bg} !important;
         }}
         
-        /* إجبار خلفية الشريط الجانبي (Sidebar) */
         section[data-testid="stSidebar"] {{
             background: {surface} !important;
             border-left: 1px solid {border} !important;
         }}
 
-        /* إجبار لون النص على كل العناصر لتخطي ألوان Streamlit الافتراضية */
         p, h1, h2, h3, h4, h5, h6, span, label, li {{
             color: {text} !important;
         }}
 
-        /* استثناء منطقة الـ Hero للحفاظ على نصوصها بيضاء دائماً */
         .hero p, .hero h1, .hero span {{
             color: white !important;
         }}
 
-        /* تحسين شكل القائمة المنسدلة للغات (Selectbox) */
         div[data-baseweb="select"] > div {{
             background-color: {surface} !important;
             border-color: {border} !important;
@@ -83,11 +76,6 @@ def inject_css(dark: bool) -> None:
             background: rgba(255,255,255,.18); padding: 6px 12px;
             border-radius: 999px; font-size:.8rem; backdrop-filter: blur(6px);
         }}
-        .card {{
-            background: {surface} !important; border: 1px solid {border} !important;
-            border-radius: 18px; padding: 18px; margin-bottom: 14px;
-            box-shadow: 0 4px 20px -12px rgba(0,0,0,.15);
-        }}
         .sentence-box {{
             background: {surface} !important; border: 2px dashed {accent}55 !important;
             border-radius: 18px; padding: 24px; min-height: 90px;
@@ -107,7 +95,6 @@ def inject_css(dark: bool) -> None:
             font-size: .85rem; border:1px solid {accent}44;
         }}
         
-        /* تعديل التبويبات (Tabs) */
         .stTabs [data-baseweb="tab-list"] {{ gap: 6px; }}
         .stTabs [data-baseweb="tab"] {{
             background: {surface} !important; border-radius: 12px; padding: 10px 18px;
@@ -123,7 +110,6 @@ def inject_css(dark: bool) -> None:
             color: white !important;
         }}
 
-        /* تعديل الأزرار (Buttons) */
         .stButton > button {{
             border-radius: 12px; border: 1px solid {border} !important; 
             background: {surface} !important; 
@@ -142,7 +128,6 @@ def inject_css(dark: bool) -> None:
         div[data-testid="stFileUploader"] section {{
             background: {surface} !important; border: 2px dashed {border} !important; border-radius: 14px;
         }}
-        .stAlert {{ border-radius: 12px; }}
         </style>
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
         """,
@@ -159,34 +144,6 @@ if "builder" not in st.session_state:
 builder: SentenceBuilder = st.session_state.builder
 
 
-# ============================ WebRTC Video Processor =================
-class SignLanguageProcessor(VideoProcessorBase):
-    """معالج الفريمات للبث المباشر عبر WebRTC."""
-
-    def __init__(self) -> None:
-        self.conf = DEFAULT_CONF
-        self.iou = DEFAULT_IOU
-        self.imgsz = DEFAULT_IMGSZ
-        self.builder: SentenceBuilder | None = None
-
-    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
-        img = frame.to_ndarray(format="bgr24")
-
-        # التنبؤ بواسطة YOLO
-        results = predict(img, conf=self.conf, iou=self.iou, imgsz=self.imgsz)
-        res = results[0]
-        annotated = res.plot()
-
-        # بناء الجملة تلقائياً إذا تم اكتشاف إشارة
-        if len(res.boxes) and self.builder is not None:
-            i = int(np.argmax(res.boxes.conf.cpu().numpy()))
-            label = res.names[int(res.boxes.cls[i])]
-            cf = float(res.boxes.conf[i])
-            self.builder.observe(label, cf)
-
-        return av.VideoFrame.from_ndarray(annotated, format="bgr24")
-
-
 # ============================ Sidebar ================================
 with st.sidebar:
     st.markdown("### ⚙️ الإعدادات")
@@ -199,13 +156,10 @@ with st.sidebar:
 
     st.markdown("#### بناء الجمل")
     builder.stability_frames = st.slider(
-        "ثبات الحرف (frames)", 2, 20, builder.stability_frames
+        "ثبات الحرف (frames)", 1, 20, builder.stability_frames
     )
     builder.min_confidence = st.slider(
         "أقل ثقة للقبول", 0.1, 0.95, builder.min_confidence, 0.05
-    )
-    builder.cooldown_frames = st.slider(
-        "وقت الانتظار بعد الحرف", 0, 20, builder.cooldown_frames
     )
 
     st.divider()
@@ -235,10 +189,10 @@ st.markdown(
     <div class="hero">
       <div>
         <h1>🤟 مترجم لغة الإشارة العربية</h1>
-        <p>YOLOv26 · بناء تلقائي للكلمات والجمل · نطق وترجمة فورية</p>
+        <p>YOLO · بناء تلقائي للكلمات والجمل · نطق وترجمة فورية</p>
       </div>
       <div>
-        <span class="badge">⚡ Real-time WebRTC</span>
+        <span class="badge">📸 Camera Snapshot</span>
         <span class="badge">🧠 {len(class_names())} فئة</span>
       </div>
     </div>
@@ -270,7 +224,7 @@ def sentence_panel(key_prefix: str) -> None:
     if c4.button("🔊 نطق عربي", use_container_width=True, key=f"{key_prefix}_audio") and builder.text.strip():
         try:
             st.audio(tts_bytes(builder.text, "ar"), format="audio/mp3")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             st.error(f"خطأ في النطق: {e}")
     if c5.button("🌐 ترجم", use_container_width=True, key=f"{key_prefix}_trans") and builder.text.strip():
         st.session_state._translation = translate(builder.text, target=target_lang, source="ar")
@@ -289,15 +243,6 @@ def sentence_panel(key_prefix: str) -> None:
         except Exception:
             pass
 
-    if builder.text.strip():
-        st.download_button(
-            "⬇️ تحميل الجملة (.txt)",
-            data=builder.text.encode("utf-8"),
-            file_name="sentence.txt",
-            mime="text/plain",
-            key=f"{key_prefix}_download"
-        )
-
 
 # ============================ Helpers ================================
 def _top_detection(result) -> tuple[str | None, float]:
@@ -309,45 +254,35 @@ def _top_detection(result) -> tuple[str | None, float]:
 
 # ============================ Tabs ===================================
 tab_cam, tab_img, tab_vid, tab_about = st.tabs(
-    ["📷 كاميرا مباشر", "🖼️ صورة", "🎬 فيديو", "ℹ️ عن المشروع"]
+    ["📷 الكاميرا", "🖼️ صورة", "🎬 فيديو", "ℹ️ عن المشروع"]
 )
 
-# ---------------- Live camera (streamlit-webrtc) ----------------
+# ---------------- Camera (Native st.camera_input) ----------------
 with tab_cam:
     col1, col2 = st.columns([3, 2], gap="large")
     with col1:
-        st.markdown("#### 🎥 البث المباشر للكاميرا")
-        st.caption("اضغط START للسماح بالكاميرا والبدء في الكشف المباشر في الوقت الفعلي.")
+        st.markdown("#### 📷 التقط إشارة بالكاميرا")
+        camera_file = st.camera_input("وجه إشارة اليد واضغط لالتقاط الحرف")
 
-        ctx = webrtc_streamer(
-            key="arsl-webrtc-stream",
-            video_processor_factory=SignLanguageProcessor,
-            rtc_configuration=RTCConfiguration(
-                {
-                    "iceServers": [
-                        {"urls": ["stun:stun.l.google.com:19302"]},
-                        {"urls": ["stun:stun1.l.google.com:19302"]},
-                        {"urls": ["stun:stun2.l.google.com:19302"]},
-                        {"urls": ["stun:stun3.l.google.com:19302"]},
-                        {"urls": ["stun:stun4.l.google.com:19302"]},
-                    ]
-                }
-            ),
-            media_stream_constraints={"video": True, "audio": False},
-            async_processing=True,
-        )
+        if camera_file:
+            img = np.array(Image.open(camera_file).convert("RGB"))
+            results = predict(img[:, :, ::-1], conf=conf, iou=iou, imgsz=imgsz)
+            res = results[0]
+            annotated = res.plot()[:, :, ::-1]
+            st.image(annotated, caption="نتيجة الكشف", use_column_width=True)
 
-        # تمرير الإعدادات و dynamic parameters للمعالج في الوقت الفعلي
-        if ctx.video_processor:
-            ctx.video_processor.conf = conf
-            ctx.video_processor.iou = iou
-            ctx.video_processor.imgsz = imgsz
-            ctx.video_processor.builder = builder
+            label, cf = _top_detection(res)
+            if label:
+                added = builder.observe(label, cf)
+                if added:
+                    st.success(f"✅ تمت إضافة الحرف: **{added}** (بنسبة ثقة {cf:.2%})")
+                else:
+                    st.info(f"🔍 تم اكتشاف: **{label}** ({cf:.2%})")
+            else:
+                st.warning("لم يتم التعرف على الإشارة، حاول مرة أخرى.")
 
     with col2:
         sentence_panel("cam")
-
-    st.info("💡 يتم بث الفيديو مباشرة عبر WebRTC لمعالجة فائقة السرعة واستجابة فورية.")
 
 # ---------------- Image ----------------
 with tab_img:
@@ -361,23 +296,10 @@ with tab_img:
             annotated = res.plot()[:, :, ::-1]
             st.image(annotated, caption="النتيجة", use_column_width=True)
 
-            if len(res.boxes):
-                rows = []
-                for b in res.boxes:
-                    rows.append({
-                        "الحرف": res.names[int(b.cls[0])],
-                        "الثقة": f"{float(b.conf[0]):.2%}",
-                    })
-                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-
-                label, cf = _top_detection(res)
-                if label:
-                    for _ in range(builder.stability_frames):
-                        added = builder.observe(label, cf)
-                    if added:
-                        st.success(f"✅ أضيف تلقائياً: **{added}** ({cf:.2f})")
-                    else:
-                        st.info(f"🔍 مكتشف: **{label}** ({cf:.2f})")
+            label, cf = _top_detection(res)
+            if label:
+                added = builder.observe(label, cf)
+                st.success(f"✅ تم الاكتشاف: **{label}** ({cf:.2%})")
             else:
                 st.warning("لم يتم اكتشاف أي إشارة.")
     with col2:
@@ -388,27 +310,16 @@ with tab_vid:
     col1, col2 = st.columns([3, 2], gap="large")
     with col1:
         up = st.file_uploader("ارفع فيديو", type=["mp4", "mov", "avi", "mkv"])
-        auto_build = st.checkbox("🧠 بناء الجملة تلقائياً من الفيديو", value=True)
         if up:
             tf = tempfile.NamedTemporaryFile(delete=False, suffix=Path(up.name).suffix)
             tf.write(up.read()); tf.close()
-            cap = cv2.VideoCapture(tf.name)
             frame_slot = st.empty()
-            status = st.empty()
-            stop = st.button("⏹️ إيقاف")
-            n = 0
             for result in predict(tf.name, conf=conf, iou=iou, imgsz=imgsz, stream=True):
-                if stop:
-                    break
                 frame_slot.image(result.plot()[:, :, ::-1], channels="RGB")
-                if auto_build:
-                    label, cf = _top_detection(result)
-                    added = builder.observe(label, cf) if label else None
-                    if added:
-                        status.success(f"➕ {added}")
-                n += 1
-            cap.release()
-            st.success(f"✅ تم معالجة {n} فريم")
+                label, cf = _top_detection(result)
+                if label:
+                    builder.observe(label, cf)
+            st.success("✅ تم الانتهاء من معالجة الفيديو")
     with col2:
         sentence_panel("vid")
 
@@ -416,19 +327,5 @@ with tab_vid:
 with tab_about:
     st.markdown("""
 ### 🤟 مترجم لغة الإشارة العربية
-
-تطبيق ذكي يستخدم **YOLOv26** لاكتشاف حروف لغة الإشارة العربية في الوقت الفعلي،
-ثم يبنيها تلقائياً لكلمات وجمل، وينطقها ويترجمها لأي لغة.
-
-**المميزات:**
-- 🎯 كشف فوري للحروف بدقة عالية عبر WebRTC
-- ✍️ بناء تلقائي للكلمات والجمل مع تصفية ذكية للضوضاء
-- 🔊 نطق النص بالعربي والإنجليزي (Text-to-Speech)
-- 🌍 ترجمة لـ 8 لغات
-- 🌙 وضع ليلي كامل
-- 📱 واجهة عصرية Responsive
-- 💾 تصدير الجمل كملفات نصية
-- ⚙️ تحكم كامل في حساسية الكشف
-
-**التقنيات:** YOLOv26 · Streamlit · WebRTC · OpenCV · gTTS · deep-translator
+تطبيق ذكي لاكتشاف حروف لغة الإشارة العربية، وبناء الكلمات والجمل مع النطق والترجمة.
 """)
