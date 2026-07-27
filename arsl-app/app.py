@@ -286,7 +286,7 @@ tab_cam, tab_img, tab_vid, tab_about = st.tabs(
     ["🎥 بث مباشر فيديو", "🖼️ صورة", "🎬 فيديو", "ℹ️ عن المشروع"]
 )
 
-# ---------------- Live Streaming (WebRTC) ----------------
+# ---------------- Live Streaming (WebRTC with TURN Relay) ----------------
 with tab_cam:
     col1, col2 = st.columns([3, 2], gap="large")
     with col1:
@@ -294,15 +294,32 @@ with tab_cam:
         st.caption("اضغط START لبدء البث المباشر بالكاميرا واكتشاف الإشارات فوريًا.")
 
         ctx = webrtc_streamer(
-            key="arsl-live-stream",
+            key="arsl-live-stream-turn",
             video_processor_factory=SignLanguageProcessor,
             rtc_configuration=RTCConfiguration(
                 {
                     "iceServers": [
+                        # سيرفرات STUN لاكتشاف العناوين
                         {"urls": ["stun:stun.l.google.com:19302"]},
                         {"urls": ["stun:stun1.l.google.com:19302"]},
-                        {"urls": ["stun:stun2.l.google.com:19302"]},
-                        {"urls": ["stun:global.stun.twilio.com:3478"]},
+                        
+                        # سيرفرات TURN Relay لفك حجب الشبكات والجدران النارية
+                        {
+                            "urls": [
+                                "turn:openrelay.metered.ca:80",
+                                "turn:openrelay.metered.ca:443",
+                                "turn:openrelay.metered.ca:443?transport=tcp",
+                            ],
+                            "username": "openrelayproject",
+                            "credential": "openrelayproject",
+                        },
+                        {
+                            "urls": [
+                                "turns:openrelay.metered.ca:443?transport=tcp",
+                            ],
+                            "username": "openrelayproject",
+                            "credential": "openrelayproject",
+                        },
                     ]
                 }
             ),
