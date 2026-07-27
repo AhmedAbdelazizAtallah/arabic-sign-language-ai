@@ -2,6 +2,7 @@ ultralytics>=8.3.0
 opencv-python>=4.9.0
 numpy>=1.24.0
 streamlit>=1.36.0
+streamlit-webrtc
 Pillow>=10.0.0
 opencv-python-headless
 onnxruntime
