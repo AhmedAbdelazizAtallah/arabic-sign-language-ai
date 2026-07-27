@@ -1,14 +1,16 @@
-"""واجهة Streamlit عصرية: كاميرا مباشر مدمجة / صور / فيديو + بناء جمل + ترجمة + نطق."""
+"""واجهة Streamlit عصرية: بث مباشر فيديو (WebRTC) / صور / فيديو + بناء جمل + ترجمة + نطق."""
 from __future__ import annotations
 
 import tempfile
 from pathlib import Path
 
+import av
 import cv2
 import numpy as np
 import pandas as pd
 import streamlit as st
 from PIL import Image
+from streamlit_webrtc import RTCConfiguration, VideoProcessorBase, webrtc_streamer
 
 from src.config import DEFAULT_CONF, DEFAULT_IMGSZ, DEFAULT_IOU
 from src.detector import class_names, load_model, predict
@@ -144,6 +146,33 @@ if "builder" not in st.session_state:
 builder: SentenceBuilder = st.session_state.builder
 
 
+# ============================ WebRTC Video Processor =================
+class SignLanguageProcessor(VideoProcessorBase):
+    """معالج الفريمات المباشر للبث الحي."""
+
+    def __init__(self) -> None:
+        self.conf = DEFAULT_CONF
+        self.iou = DEFAULT_IOU
+        self.imgsz = DEFAULT_IMGSZ
+        self.builder: SentenceBuilder | None = None
+
+    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+        img = frame.to_ndarray(format="bgr24")
+
+        # التنبؤ بالفريم الحي عبر YOLO
+        results = predict(img, conf=self.conf, iou=self.iou, imgsz=self.imgsz)
+        res = results[0]
+        annotated = res.plot()
+
+        if len(res.boxes) and self.builder is not None:
+            i = int(np.argmax(res.boxes.conf.cpu().numpy()))
+            label = res.names[int(res.boxes.cls[i])]
+            cf = float(res.boxes.conf[i])
+            self.builder.observe(label, cf)
+
+        return av.VideoFrame.from_ndarray(annotated, format="bgr24")
+
+
 # ============================ Sidebar ================================
 with st.sidebar:
     st.markdown("### ⚙️ الإعدادات")
@@ -156,7 +185,7 @@ with st.sidebar:
 
     st.markdown("#### بناء الجمل")
     builder.stability_frames = st.slider(
-        "ثبات الحرف (frames)", 1, 20, builder.stability_frames
+        "ثبات الحرف (frames)", 2, 20, builder.stability_frames
     )
     builder.min_confidence = st.slider(
         "أقل ثقة للقبول", 0.1, 0.95, builder.min_confidence, 0.05
@@ -189,10 +218,10 @@ st.markdown(
     <div class="hero">
       <div>
         <h1>🤟 مترجم لغة الإشارة العربية</h1>
-        <p>YOLO · بناء تلقائي للكلمات والجمل · نطق وترجمة فورية</p>
+        <p>YOLO · بث مباشر للبث الحي · بناء تلقائي · نطق وترجمة</p>
       </div>
       <div>
-        <span class="badge">📸 Camera Snapshot</span>
+        <span class="badge">🎥 Live Stream WebRTC</span>
         <span class="badge">🧠 {len(class_names())} فئة</span>
       </div>
     </div>
@@ -206,7 +235,7 @@ st.write("")
 def sentence_panel(key_prefix: str) -> None:
     st.markdown("#### ✍️ الجملة المُكوَّنة")
     
-    placeholder = '<span style="opacity:.4">ابدأ بالإشارة…</span>'
+    placeholder = '<span style="opacity:.4">ابدأ بالإشارة أمام الكاميرا…</span>'
     display_text = builder.text or placeholder
     
     st.markdown(
@@ -254,32 +283,38 @@ def _top_detection(result) -> tuple[str | None, float]:
 
 # ============================ Tabs ===================================
 tab_cam, tab_img, tab_vid, tab_about = st.tabs(
-    ["📷 الكاميرا", "🖼️ صورة", "🎬 فيديو", "ℹ️ عن المشروع"]
+    ["🎥 بث مباشر فيديو", "🖼️ صورة", "🎬 فيديو", "ℹ️ عن المشروع"]
 )
 
-# ---------------- Camera (Native st.camera_input) ----------------
+# ---------------- Live Streaming (WebRTC) ----------------
 with tab_cam:
     col1, col2 = st.columns([3, 2], gap="large")
     with col1:
-        st.markdown("#### 📷 التقط إشارة بالكاميرا")
-        camera_file = st.camera_input("وجه إشارة اليد واضغط لالتقاط الحرف")
+        st.markdown("#### 🎥 البث المباشر للكاميرا")
+        st.caption("اضغط START لبدء البث المباشر بالكاميرا واكتشاف الإشارات فوريًا.")
 
-        if camera_file:
-            img = np.array(Image.open(camera_file).convert("RGB"))
-            results = predict(img[:, :, ::-1], conf=conf, iou=iou, imgsz=imgsz)
-            res = results[0]
-            annotated = res.plot()[:, :, ::-1]
-            st.image(annotated, caption="نتيجة الكشف", use_column_width=True)
+        ctx = webrtc_streamer(
+            key="arsl-live-stream",
+            video_processor_factory=SignLanguageProcessor,
+            rtc_configuration=RTCConfiguration(
+                {
+                    "iceServers": [
+                        {"urls": ["stun:stun.l.google.com:19302"]},
+                        {"urls": ["stun:stun1.l.google.com:19302"]},
+                        {"urls": ["stun:stun2.l.google.com:19302"]},
+                        {"urls": ["stun:global.stun.twilio.com:3478"]},
+                    ]
+                }
+            ),
+            media_stream_constraints={"video": True, "audio": False},
+            async_processing=True,
+        )
 
-            label, cf = _top_detection(res)
-            if label:
-                added = builder.observe(label, cf)
-                if added:
-                    st.success(f"✅ تمت إضافة الحرف: **{added}** (بنسبة ثقة {cf:.2%})")
-                else:
-                    st.info(f"🔍 تم اكتشاف: **{label}** ({cf:.2%})")
-            else:
-                st.warning("لم يتم التعرف على الإشارة، حاول مرة أخرى.")
+        if ctx.video_processor:
+            ctx.video_processor.conf = conf
+            ctx.video_processor.iou = iou
+            ctx.video_processor.imgsz = imgsz
+            ctx.video_processor.builder = builder
 
     with col2:
         sentence_panel("cam")
@@ -298,7 +333,7 @@ with tab_img:
 
             label, cf = _top_detection(res)
             if label:
-                added = builder.observe(label, cf)
+                builder.observe(label, cf)
                 st.success(f"✅ تم الاكتشاف: **{label}** ({cf:.2%})")
             else:
                 st.warning("لم يتم اكتشاف أي إشارة.")
@@ -326,6 +361,6 @@ with tab_vid:
 # ---------------- About ----------------
 with tab_about:
     st.markdown("""
-### 🤟 مترجم لغة الإشارة العربية
-تطبيق ذكي لاكتشاف حروف لغة الإشارة العربية، وبناء الكلمات والجمل مع النطق والترجمة.
+### 🤟 مترجم لغة الإشارة العربية (بث مباشر)
+تطبيق ذكي لاكتشاف حروف لغة الإشارة العربية عبر البث المباشر للفيديو، وبناء الكلمات والجمل مع النطق والترجمة.
 """)
