@@ -1,14 +1,16 @@
-"""واجهة Streamlit عصرية: كاميرا/صور/فيديو + بناء جمل + ترجمة + نطق."""
+"""واجهة Streamlit عصرية: كاميرا مباشر (WebRTC) / صور / فيديو + بناء جمل + ترجمة + نطق."""
 from __future__ import annotations
 
 import tempfile
 from pathlib import Path
 
+import av
 import cv2
 import numpy as np
 import pandas as pd
 import streamlit as st
 from PIL import Image
+from streamlit_webrtc import RTCConfiguration, VideoProcessorBase, webrtc_streamer
 
 from src.config import DEFAULT_CONF, DEFAULT_IMGSZ, DEFAULT_IOU
 from src.detector import class_names, load_model, predict
@@ -157,6 +159,34 @@ if "builder" not in st.session_state:
 builder: SentenceBuilder = st.session_state.builder
 
 
+# ============================ WebRTC Video Processor =================
+class SignLanguageProcessor(VideoProcessorBase):
+    """معالج الفريمات للبث المباشر عبر WebRTC."""
+
+    def __init__(self) -> None:
+        self.conf = DEFAULT_CONF
+        self.iou = DEFAULT_IOU
+        self.imgsz = DEFAULT_IMGSZ
+        self.builder: SentenceBuilder | None = None
+
+    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+        img = frame.to_ndarray(format="bgr24")
+
+        # التنبؤ بواسطة YOLO
+        results = predict(img, conf=self.conf, iou=self.iou, imgsz=self.imgsz)
+        res = results[0]
+        annotated = res.plot()
+
+        # بناء الجملة تلقائياً إذا تم اكتشاف إشارة
+        if len(res.boxes) and self.builder is not None:
+            i = int(np.argmax(res.boxes.conf.cpu().numpy()))
+            label = res.names[int(res.boxes.cls[i])]
+            cf = float(res.boxes.conf[i])
+            self.builder.observe(label, cf)
+
+        return av.VideoFrame.from_ndarray(annotated, format="bgr24")
+
+
 # ============================ Sidebar ================================
 with st.sidebar:
     st.markdown("### ⚙️ الإعدادات")
@@ -208,7 +238,7 @@ st.markdown(
         <p>YOLOv26 · بناء تلقائي للكلمات والجمل · نطق وترجمة فورية</p>
       </div>
       <div>
-        <span class="badge">⚡ Real-time</span>
+        <span class="badge">⚡ Real-time WebRTC</span>
         <span class="badge">🧠 {len(class_names())} فئة</span>
       </div>
     </div>
@@ -278,34 +308,34 @@ tab_cam, tab_img, tab_vid, tab_about = st.tabs(
     ["📷 كاميرا مباشر", "🖼️ صورة", "🎬 فيديو", "ℹ️ عن المشروع"]
 )
 
-# ---------------- Live camera ----------------
+# ---------------- Live camera (streamlit-webrtc) ----------------
 with tab_cam:
     col1, col2 = st.columns([3, 2], gap="large")
     with col1:
-        st.markdown("#### 📸 التقط إشارة")
-        st.caption("خد صورة لكل حرف — التطبيق هيضيفه للجملة لو ثبت.")
-        snap = st.camera_input("الكاميرا", label_visibility="collapsed")
-        if snap:
-            img = np.array(Image.open(snap).convert("RGB"))
-            results = predict(img[:, :, ::-1], conf=conf, iou=iou, imgsz=imgsz)
-            res = results[0]
-            annotated = res.plot()[:, :, ::-1]
-            st.image(annotated, use_column_width=True)
-            label, cf = _top_detection(res)
-            if label:
-                # اجبار الإضافة الفورية عبر تكرار المراقبة
-                for _ in range(builder.stability_frames):
-                    added = builder.observe(label, cf)
-                if added:
-                    st.success(f"✅ أضيف: **{added}** ({cf:.2f})")
-                else:
-                    st.info(f"🔍 مكتشف: **{label}** ({cf:.2f})")
-            else:
-                st.warning("لم يتم اكتشاف إشارة.")
+        st.markdown("#### 🎥 البث المباشر للكاميرا")
+        st.caption("اضغط START للسماح بالكاميرا والبدء في الكشف المباشر في الوقت الفعلي.")
+
+        ctx = webrtc_streamer(
+            key="arsl-webrtc-stream",
+            video_processor_factory=SignLanguageProcessor,
+            rtc_configuration=RTCConfiguration(
+                {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+            ),
+            media_stream_constraints={"video": True, "audio": False},
+            async_processing=True,
+        )
+
+        # تمرير الإعدادات و dynamic parameters للمعالج في الوقت الفعلي
+        if ctx.video_processor:
+            ctx.video_processor.conf = conf
+            ctx.video_processor.iou = iou
+            ctx.video_processor.imgsz = imgsz
+            ctx.video_processor.builder = builder
+
     with col2:
         sentence_panel("cam")
 
-    st.info("💡 للأداء الحقيقي real-time (30+ FPS) شغّل: `python -m src.cli webcam`")
+    st.info("💡 يتم بث الفيديو مباشرة عبر WebRTC لمعالجة فائقة السرعة واستجابة فورية.")
 
 # ---------------- Image ----------------
 with tab_img:
@@ -328,7 +358,6 @@ with tab_img:
                     })
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-                # الإضافة التلقائية فور الكشف بدون زر
                 label, cf = _top_detection(res)
                 if label:
                     for _ in range(builder.stability_frames):
@@ -380,7 +409,7 @@ with tab_about:
 ثم يبنيها تلقائياً لكلمات وجمل، وينطقها ويترجمها لأي لغة.
 
 **المميزات:**
-- 🎯 كشف فوري للحروف بدقة عالية
+- 🎯 كشف فوري للحروف بدقة عالية عبر WebRTC
 - ✍️ بناء تلقائي للكلمات والجمل مع تصفية ذكية للضوضاء
 - 🔊 نطق النص بالعربي والإنجليزي (Text-to-Speech)
 - 🌍 ترجمة لـ 8 لغات
@@ -389,5 +418,5 @@ with tab_about:
 - 💾 تصدير الجمل كملفات نصية
 - ⚙️ تحكم كامل في حساسية الكشف
 
-**التقنيات:** YOLOv26 · Streamlit · OpenCV · gTTS · deep-translator
+**التقنيات:** YOLOv26 · Streamlit · WebRTC · OpenCV · gTTS · deep-translator
 """)
